@@ -17,19 +17,19 @@ const ASSETS = {
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState('menu');
-  const [mainTime, setMainTime] = useState(-75);
+  const [gameTime, setGameTime] = useState(-75);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
 
   const appState = useRef(AppState.currentState);
-  const startTimeRef = useRef(null); 
-  const baseTimeRef = useRef(-75); 
+  const startTimeRef = useRef(null);
+  const baseTimeRef = useRef(-75);
 
   // --- 1. ZAMAN GÜNCELLEME MANTIĞI ---
   const updateTime = () => {
     if (startTimeRef.current !== null) {
       const now = Date.now();
       const elapsedSeconds = Math.floor((now - startTimeRef.current) / 1000);
-      setMainTime(baseTimeRef.current + elapsedSeconds);
+      setGameTime(baseTimeRef.current + elapsedSeconds);
     }
   };
 
@@ -49,7 +49,7 @@ export default function App() {
         } else if (savedBaseTime) {
           const bTime = parseInt(savedBaseTime);
           baseTimeRef.current = bTime;
-          setMainTime(bTime);
+          setGameTime(bTime);
         }
       } catch (e) { console.error("Load Error", e); }
     };
@@ -69,7 +69,7 @@ export default function App() {
   useEffect(() => {
     const subscription = AppState.addEventListener('change', nextAppState => {
       if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
-        if (isTimerRunning) updateTime(); 
+        if (isTimerRunning) updateTime();
       }
       appState.current = nextAppState;
     });
@@ -81,13 +81,13 @@ export default function App() {
     if (newStatus) {
       const now = Date.now();
       startTimeRef.current = now;
-      baseTimeRef.current = mainTime;
+      baseTimeRef.current = gameTime;
       await AsyncStorage.setItem('@start_time', now.toString());
-      await AsyncStorage.setItem('@base_time', mainTime.toString());
+      await AsyncStorage.setItem('@base_time', gameTime.toString());
       await AsyncStorage.setItem('@is_running', 'true');
     } else {
       await AsyncStorage.setItem('@is_running', 'false');
-      await AsyncStorage.setItem('@base_time', mainTime.toString());
+      await AsyncStorage.setItem('@base_time', gameTime.toString());
       startTimeRef.current = null;
     }
     setIsTimerRunning(newStatus);
@@ -107,29 +107,29 @@ export default function App() {
   // Genel hesaplama yardımcı fonksiyonu
   const calculateObjective = (cycle, firstSpawn) => {
     // 1. Oyun henüz başlamadı (Pre-game)
-    if (mainTime < 0) {
-      const secondsToHorn = Math.abs(mainTime);
+    if (gameTime < 0) {
+      const secondsToHorn = Math.abs(gameTime);
       return formatTime(secondsToHorn + firstSpawn);
     }
     // 2. İlk çıkış henüz gerçekleşmedi
-    if (mainTime < firstSpawn) {
-      return formatTime(firstSpawn - mainTime);
+    if (gameTime < firstSpawn) {
+      return formatTime(firstSpawn - gameTime);
     }
     // 3. Döngüsel çıkış (Modulo mantığı)
-    const timeSinceFirst = mainTime - firstSpawn;
+    const timeSinceFirst = gameTime - firstSpawn;
     const remaining = cycle - (timeSinceFirst % cycle);
     return formatTime(remaining === 0 ? cycle : remaining);
   };
 
   const getBountyRuneTime = () => calculateObjective(180, 0); // 0. dk'da başlar, 3dk bir
   const getWaterRuneTime = () => {
-    if (mainTime >= 240) return "Done";
+    if (gameTime >= 240) return "Done";
     return calculateObjective(120, 120); // 2. dk'da başlar
   };
   const getPowerUpRuneTime = () => calculateObjective(120, 360); // 6. dk'da başlar
   const getHealingLotusTime = () => calculateObjective(180, 180); // 3. dk'da başlar
   const getShrineOfWisdomTime = () => calculateObjective(420, 420); // 7. dk'da başlar
-  
+
   const getRoshanTime = () => {
     // Roshan ve Tormentor genelde manuel tetiklenir ama 
     // buraya oyun başından itibaren ne kadar olduğunu yazabiliriz
@@ -167,6 +167,15 @@ export default function App() {
     </View>
   );
 
+
+const isWaterStage = gameTime < 240;
+const dynamicRuneData = {
+  title: isWaterStage ? "Water Rune" : "Power Rune",
+  image: isWaterStage ? ASSETS.waterRune : ASSETS.powerUpRunesGif, // ASSETS içindeki isme dikkat!
+  timer: isWaterStage ? getWaterRuneTime() : getPowerUpRuneTime()
+};
+
+
   const timerContent = (
     <View style={styles.screenContainer}>
       <TouchableOpacity onPress={() => setCurrentScreen('menu')} style={styles.navigationButton}>
@@ -179,30 +188,35 @@ export default function App() {
           style={[styles.masterButton, isTimerRunning && styles.masterButtonActive]}
           onPress={toggleTimer} // DOĞRU: setIsTimerRunning yerine toggleTimer kullanıldı
         >
-          <Text style={styles.masterTimeText}>{formatTime(mainTime)}</Text>
+          <Text style={styles.masterTimeText}>{formatTime(gameTime)}</Text>
           <Text style={styles.masterStatusText}>{isTimerRunning ? "PAUSE" : "START GAME"}</Text>
         </TouchableOpacity>
       </View>
-
+      {/* ROW 1 */}
       <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={styles.timerRow}>
-          <View style={styles.subTimerCardThree}>
-            <View style={styles.iconBox}><Image source={ASSETS.bountyRune} style={styles.buttonImage} /></View>
+        {/* ROW 1: Bounty ve Dinamik Rün (Water -> Power) */}
+        <View style={[styles.timerRow, styles.centerRow]}>
+
+          {/* Bounty Kartı */}
+          <View style={styles.subTimerCardTwo}>
+            <View style={styles.iconBox}>
+              <Image source={ASSETS.bountyRune} style={styles.buttonImage} />
+            </View>
             <Text style={styles.subTimerTitle}>Bounty</Text>
             <Text style={styles.subTimerValue}>{getBountyRuneTime()}</Text>
           </View>
-          <View style={styles.subTimerCardThree}>
-            <View style={styles.iconBox}><Image source={ASSETS.waterRune} style={styles.buttonImage} /></View>
-            <Text style={styles.subTimerTitle}>Water</Text>
-            <Text style={styles.subTimerValue}>{getWaterRuneTime()}</Text>
-          </View>
-          <View style={styles.subTimerCardThree}>
-            <View style={styles.iconBox}><Image source={ASSETS.powerUpRunesGif} style={styles.buttonImage} /></View>
-            <Text style={styles.subTimerTitle}>Power Up</Text>
-            <Text style={styles.subTimerValue}>{getPowerUpRuneTime()}</Text>
-          </View>
-        </View>
 
+          {/* Dinamik Kart: 4. dk'ya kadar Water, sonra Power */}
+          <View style={styles.subTimerCardTwo}>
+            <View style={styles.iconBox}>
+              <Image source={dynamicRuneData.image} style={styles.buttonImage} />
+            </View>
+            <Text style={styles.subTimerTitle}>{dynamicRuneData.title}</Text>
+            <Text style={styles.subTimerValue}>{dynamicRuneData.timer}</Text>
+          </View>
+
+        </View>
+        {/* ROW 2 */}
         <View style={[styles.timerRow, styles.centerRow]}>
           <View style={styles.subTimerCardTwo}>
             <View style={styles.iconBox}><Image source={ASSETS.healingLotus} style={styles.buttonImage} /></View>
@@ -215,12 +229,12 @@ export default function App() {
             <Text style={styles.subTimerValue}>{getShrineOfWisdomTime()}</Text>
           </View>
         </View>
-
+        {/* ROW 3 */}
         <View style={styles.timerRow}>
           <View style={styles.subTimerCardThree}>
             <View style={styles.iconBox}><Image source={ASSETS.roshan} style={styles.buttonImage} /></View>
             <Text style={styles.subTimerTitle}>Roshan</Text>
-            <Text style={styles.subTimerValue}>Kill</Text> {/* Roshan */}
+            <Text style={styles.subTimerValue}>Dead</Text> {/* Roshan */}
           </View>
           <View style={styles.subTimerCardThree}>
             <View style={styles.iconBox}><Image source={ASSETS.tormentor} style={styles.buttonImage} /></View>
@@ -273,6 +287,6 @@ const styles = StyleSheet.create({
   subTimerCardTwo: { width: '45%', backgroundColor: '#1A1F2B', borderRadius: 15, paddingVertical: 12, alignItems: 'center' },
   iconBox: { width: 50, height: 50, backgroundColor: '#0F1219', borderRadius: 12, overflow: 'hidden' },
   buttonImage: { width: '100%', height: '100%', resizeMode: 'contain' },
-  subTimerTitle: { color: '#8A92A6', fontSize: 11 },
+  subTimerTitle: { color: '#8A92A6', fontSize: 13 },
   subTimerValue: { color: 'white', fontSize: 15, fontWeight: 'bold' }
 });
