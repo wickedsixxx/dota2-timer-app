@@ -4,15 +4,15 @@ import { useEffect, useRef, useState } from 'react';
 import { AppState, Image, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 const ASSETS = {
-  bountyRune: require('./assets/74px-rune_bounty_abilityicon_dota2_wikiasset.png'),
-  waterRune: require('./assets/74px-rune_water_abilityicon_dota2_wikiasset.png'),
-  powerUpRuneHaste: require('./assets/74px-rune_haste_abilityicon_dota2_gameasset.png'),
-  glyphOfFortification: require('./assets/74px-glyph_of_fortification_abilityicon_dota2_gameasset.png'),
-  roshan: require('./assets/150px-roshan_model.png'),
-  tormentor: require('./assets/150px-tormentor_radiant_model.png'),
-  healingLotus: require('./assets/86px-healing_lotus_eat_lotus_abilityicon_dota2_wikiasset.png'),
-  powerUpRunesGif: require('./assets/dota2PowerUpRuneGif.gif'),
-  shrineOfWisdom: require('./assets/86px-shrine_of_wisdom_experience_fountain_abilityicon_dota2_wikiasset.png'),
+  bountyRune: require('./assets/Image/74px-rune_bounty_abilityicon_dota2_wikiasset.png'),
+  waterRune: require('./assets/Image/74px-rune_water_abilityicon_dota2_wikiasset.png'),
+  powerUpRuneHaste: require('./assets/Image/74px-rune_haste_abilityicon_dota2_gameasset.png'),
+  glyphOfFortification: require('./assets/Image/74px-glyph_of_fortification_abilityicon_dota2_gameasset.png'),
+  roshan: require('./assets/Image/150px-roshan_model.png'),
+  tormentor: require('./assets/Image/150px-tormentor_radiant_model.png'),
+  healingLotus: require('./assets/Image/86px-healing_lotus_eat_lotus_abilityicon_dota2_wikiasset.png'),
+  powerUpRunesGif: require('./assets/GIF/dota2PowerUpRuneGif.gif'),
+  shrineOfWisdom: require('./assets/Image/86px-shrine_of_wisdom_experience_fountain_abilityicon_dota2_wikiasset.png'),
 };
 
 export default function App() {
@@ -167,17 +167,17 @@ export default function App() {
           </TouchableOpacity>
           <TouchableOpacity style={[styles.menuCard, styles.purpleCard]}>
             <MaterialCommunityIcons name="chart-bar" size={36} color="white" />
-            <Text style={styles.cardLabel}>İstatistikler</Text>
+            <Text style={styles.cardLabel}>*default timer*</Text>
           </TouchableOpacity>
         </View>
         <View style={styles.gridRow}>
           <TouchableOpacity style={[styles.menuCard, styles.greyCard]}>
             <Ionicons name="settings-outline" size={34} color="white" />
-            <Text style={styles.cardLabel}>Ayarlar</Text>
+            <Text style={styles.cardLabel}>Settings</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.menuCard, styles.orangeCard]}>
             <Ionicons name="information-circle-outline" size={38} color="white" />
-            <Text style={styles.cardLabel}>Hakkında</Text>
+            <Text style={styles.cardLabel}>About</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -226,7 +226,7 @@ export default function App() {
             <Text style={styles.subTimerValue}>{getBountyRuneTime()}</Text>
           </View>
 
-          {/* Dinamik Kart: 4. dk'ya kadar Water, sonra Power */}
+          {/* Dinamik Kart: 4. dk'ya kadar Water, sonra Power Up */}
           <View style={styles.subTimerCardTwo}>
             <View style={styles.iconBox}>
               <Image source={dynamicRuneData.image} style={styles.buttonImage} />
