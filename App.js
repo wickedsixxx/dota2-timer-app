@@ -20,6 +20,8 @@ export default function App() {
   const [gameTime, setGameTime] = useState(-75);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
 
+  const [isEditModalVisible, setEditModalVisible] = useState(false);
+
   const appState = useRef(AppState.currentState);
   const startTimeRef = useRef(null);
   const baseTimeRef = useRef(-75);
@@ -92,6 +94,21 @@ export default function App() {
     }
     setIsTimerRunning(newStatus);
   };
+  const resetTimer = async () => {
+    setIsTimerRunning(false);
+    const initialTime = -75;
+    setGameTime(initialTime);
+    baseTimeRef.current = initialTime;
+    startTimeRef.current = null;
+
+    // Hafızayı temizle
+    await AsyncStorage.setItem('@is_running', 'false');
+    await AsyncStorage.setItem('@base_time', initialTime.toString());
+    await AsyncStorage.removeItem('@start_time');
+
+    setEditModalVisible(false); // Pencereyi kapat
+  };
+
 
   const formatTime = (totalSeconds) => {
     const absoluteSeconds = Math.abs(totalSeconds);
@@ -168,12 +185,12 @@ export default function App() {
   );
 
 
-const isWaterStage = gameTime < 240;
-const dynamicRuneData = {
-  title: isWaterStage ? "Water Rune" : "Power Rune",
-  image: isWaterStage ? ASSETS.waterRune : ASSETS.powerUpRunesGif, // ASSETS içindeki isme dikkat!
-  timer: isWaterStage ? getWaterRuneTime() : getPowerUpRuneTime()
-};
+  const isWaterStage = gameTime < 240;
+  const dynamicRuneData = {
+    title: isWaterStage ? "Water Rune" : "Power Rune",
+    image: isWaterStage ? ASSETS.waterRune : ASSETS.powerUpRunesGif, // ASSETS içindeki isme dikkat!
+    timer: isWaterStage ? getWaterRuneTime() : getPowerUpRuneTime()
+  };
 
 
   const timerContent = (
@@ -187,9 +204,12 @@ const dynamicRuneData = {
         <TouchableOpacity
           style={[styles.masterButton, isTimerRunning && styles.masterButtonActive]}
           onPress={toggleTimer} // DOĞRU: setIsTimerRunning yerine toggleTimer kullanıldı
+          onLongPress={() => setEditModalVisible(true)}
+          delayLongPress={600} // 0.6 saniye basılı tutunca tetiklenir
+
         >
           <Text style={styles.masterTimeText}>{formatTime(gameTime)}</Text>
-          <Text style={styles.masterStatusText}>{isTimerRunning ? "PAUSE" : "START GAME"}</Text>
+          <Text style={styles.masterStatusText}>{isTimerRunning ? "PAUSE" : "START"}</Text>
         </TouchableOpacity>
       </View>
       {/* ROW 1 */}
@@ -256,6 +276,47 @@ const dynamicRuneData = {
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" />
       {currentScreen === 'menu' ? menuContent : timerContent}
+
+      {/* DÜZENLEME MODAL (PENCERESİ) */}
+      {isEditModalVisible && (
+        <View style={styles.editOverlay}>
+          <View style={styles.editCard}>
+            <Text style={styles.editTitle}>Change Timer</Text>
+            
+            <View style={styles.editRow}>
+              <TouchableOpacity 
+                style={styles.editBtn} 
+                onPress={() => {
+                  const newTime = gameTime - 60;
+                  setGameTime(newTime);
+                  baseTimeRef.current = newTime; // Ref'i de güncellemeliyiz!
+                }}
+              >
+                <Text style={styles.editBtnText}>-1 min</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.editBtn} 
+                onPress={() => {
+                  const newTime = gameTime + 60;
+                  setGameTime(newTime);
+                  baseTimeRef.current = newTime;
+                }}
+              >
+                <Text style={styles.editBtnText}>+1 min</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity style={styles.resetBtn} onPress={resetTimer}>
+              <Text style={styles.resetBtnText}>Reset</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.closeBtn} onPress={() => setEditModalVisible(false)}>
+              <Text style={styles.closeBtnText}>Back</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -288,5 +349,29 @@ const styles = StyleSheet.create({
   iconBox: { width: 50, height: 50, backgroundColor: '#0F1219', borderRadius: 12, overflow: 'hidden' },
   buttonImage: { width: '100%', height: '100%', resizeMode: 'contain' },
   subTimerTitle: { color: '#8A92A6', fontSize: 13 },
-  subTimerValue: { color: 'white', fontSize: 15, fontWeight: 'bold' }
+  subTimerValue: { color: 'white', fontSize: 15, fontWeight: 'bold' },
+  editOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 999,
+  },
+  editCard: {
+    width: '80%',
+    backgroundColor: '#1A1F2B',
+    borderRadius: 25,
+    padding: 25,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#2A3142',
+  },
+  editTitle: { color: 'white', fontSize: 18, fontWeight: 'bold', marginBottom: 20 },
+  editRow: { flexDirection: 'row', gap: 15 },
+  editBtn: { backgroundColor: '#2A3142', padding: 15, borderRadius: 12, minWidth: 80, alignItems: 'center' },
+  editBtnText: { color: 'white', fontWeight: '600' },
+  resetBtn: { backgroundColor: '#E53E3E', width: '100%', padding: 15, borderRadius: 12, marginTop: 20, alignItems: 'center' },
+  resetBtnText: { color: 'white', fontWeight: 'bold' },
+  closeBtn: { marginTop: 20 },
+  closeBtnText: { color: '#8A92A6', fontSize: 14 }
 });
