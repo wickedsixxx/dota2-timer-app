@@ -38,13 +38,16 @@ export default function App() {
   const baseTimeRef = useRef(-75);
 
   // --- 1. ZAMAN GÜNCELLEME MANTIĞI ---
-  const updateTime = () => {
-    if (startTimeRef.current !== null) {
-      const now = Date.now();
-      const elapsedSeconds = Math.floor((now - startTimeRef.current) / 1000);
-      setGameTime(baseTimeRef.current + elapsedSeconds);
-    }
-  };
+const updateTime = () => {
+  if (startTimeRef.current !== null) {
+    const now = Date.now();
+    // Tam olarak kaç saniye geçtiğini hesapla
+    const elapsedSeconds = Math.floor((now - startTimeRef.current) / 1000);
+    
+    // Ana süreyi güncelle (Taban süre + geçen süre)
+    setGameTime(baseTimeRef.current + elapsedSeconds);
+  }
+};
 
   // --- 2. VERİ YÜKLEME (STORAGE) ---
   useEffect(() => {
@@ -67,7 +70,7 @@ export default function App() {
       } catch (e) { console.error("Load Error", e); }
     };
 
-    
+
     loadData();
   }, []);
 
@@ -81,7 +84,7 @@ export default function App() {
 
     // 1. BOUNTY RÜNÜ (Her 4 dakikada bir: 0, 240, 480...)
     if (gameTime >= 0 && gameTime % 240 === 0) {
-      playSound(ASSETS.bountyRuneTimerExpiredSound); 
+      playSound(ASSETS.bountyRuneTimerExpiredSound);
     }
 
     // 2. WATER RÜNÜ (Sadece 2. ve 4. dakikada: 120, 240)
@@ -153,14 +156,38 @@ export default function App() {
     setEditModalVisible(false); // Pencereyi kapat
   };
 
+  const adjustMinutes = (amount) => {
+  if (isTimerRunning) {
+    // --- OYUN AKARKEN (START) ---
+    // Zaman çizgisini (startTimeRef) kaydırıyoruz. 
+    // Bu işlem saniyenin akışını bozmaz, sadece 'başlangıç noktasını' iter.
+    startTimeRef.current -= (amount * 1000);
+    
+    // Ekranda değişikliği anında (milisaniye beklemeden) görmek için
+    updateTime();
+  } else {
+    // --- OYUN DURURKEN (PAUSE) ---
+    // Sadece taban süreyi (baseTime) güncelliyoruz.
+    const newBase = baseTimeRef.current + amount;
+    baseTimeRef.current = newBase;
+    setGameTime(newBase);
+    
+    // Hafızaya kaydet
+    AsyncStorage.setItem('@base_time', newBase.toString());
+  }
+};
 
-  const formatTime = (totalSeconds) => {
-    const absoluteSeconds = Math.abs(totalSeconds);
-    const minutes = Math.floor(absoluteSeconds / 60);
-    const seconds = absoluteSeconds % 60;
-    const sign = totalSeconds < 0 ? "-" : "";
-    return `${sign}${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
-  };
+ const formatTime = (totalSeconds) => {
+  // Eğer süre -0.9 ile 0 arasındaysa ekranda -0:00 görünmemesi için 
+  // totalSeconds === 0 kontrolü yapabilirsin ama abs yeterli olacaktır.
+  const absoluteSeconds = Math.abs(totalSeconds);
+  const minutes = Math.floor(absoluteSeconds / 60);
+  const seconds = absoluteSeconds % 60;
+  
+  // Sadece süre tam olarak 0'dan küçükse eksi işareti koy
+  const sign = totalSeconds < 0 ? "-" : "";
+  return `${sign}${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+};
 
   const playSound = async (soundAsset) => {
     try {
@@ -175,33 +202,40 @@ export default function App() {
   };
 
   // Rün Döngüleri
-  // --- DOTA 2 OBJECTIVE LOGIC ---
-
   // Genel hesaplama yardımcı fonksiyonu
-  const calculateObjective = (cycle, firstSpawn) => {
-    // 1. Oyun henüz başlamadı (Preparation phase)
+// --- DOTA 2 OBJECTIVE LOGIC ---
+  const calculateObjective = (cycle, firstSpawn, startsInPreGame = false) => {
+    // 1. HAZIRLIK EVRESİ (Oyun zamanı negatifken)
     if (gameTime < 0) {
-      const secondsToHorn = Math.abs(gameTime);
-      return formatTime(secondsToHorn + firstSpawn);
+      if (startsInPreGame) {
+        // Bounty: 00:00'a kadar olan süreyi geri sayar
+        return formatTime(Math.abs(gameTime));
+      } else {
+        // Diğerleri: İlk çıkış sürelerinde sabit bekler
+        return formatTime(firstSpawn);
+      }
     }
-    // 2. İlk çıkış henüz gerçekleşmedi
+
+    // 2. OYUN BAŞLADI (Horn çaldı, gameTime >= 0)
     if (gameTime < firstSpawn) {
       return formatTime(firstSpawn - gameTime);
     }
-    // 3. Döngüsel çıkış (Modulo mantığı)
+
+    // 3. DÖNGÜSEL ÇIKIŞ
     const timeSinceFirst = gameTime - firstSpawn;
     const remaining = cycle - (timeSinceFirst % cycle);
     return formatTime(remaining === 0 ? cycle : remaining);
   };
 
-  const getBountyRuneTime = () => calculateObjective(180, 0); // 0. dk'da başlar, 3dk bir
+  // Rün Tanımlamaları
+  const getBountyRuneTime = () => calculateObjective(240, 0, true);
   const getWaterRuneTime = () => {
     if (gameTime >= 240) return "Done";
-    return calculateObjective(120, 120); // 2. dk'da başlar
+    return calculateObjective(120, 120, false);
   };
-  const getPowerUpRuneTime = () => calculateObjective(120, 360); // 6. dk'da başlar
-  const getHealingLotusTime = () => calculateObjective(180, 180); // 3. dk'da başlar
-  const getShrineOfWisdomTime = () => calculateObjective(420, 420); // 7. dk'da başlar
+  const getHealingLotusTime = () => calculateObjective(180, 180, false);
+  const getShrineOfWisdomTime = () => calculateObjective(420, 420, false);
+  const getPowerUpRuneTime = () => calculateObjective(120, 360, false);
 
   const getRoshanTime = () => {
     // Roshan ve Tormentor genelde manuel tetiklenir ama 
@@ -240,14 +274,12 @@ export default function App() {
     </View>
   );
 
-
   const isWaterStage = gameTime < 240;
   const dynamicRuneData = {
     title: isWaterStage ? "Water Rune" : "Power Rune",
-    image: isWaterStage ? ASSETS.waterRune : ASSETS.powerUpRunesGif, // ASSETS içindeki isme dikkat!
+    image: isWaterStage ? ASSETS.waterRune : ASSETS.powerUpRunesGif,
     timer: isWaterStage ? getWaterRuneTime() : getPowerUpRuneTime()
   };
-
 
   const timerContent = (
     <View style={styles.screenContainer}>
@@ -259,10 +291,9 @@ export default function App() {
       <View style={styles.masterTimerWrapper}>
         <TouchableOpacity
           style={[styles.masterButton, isTimerRunning && styles.masterButtonActive]}
-          onPress={toggleTimer} // DOĞRU: setIsTimerRunning yerine toggleTimer kullanıldı
+          onPress={toggleTimer} 
           onLongPress={() => setEditModalVisible(true)}
           delayLongPress={600} // 0.6 saniye basılı tutunca tetiklenir
-
         >
           <Text style={styles.masterTimeText}>{formatTime(gameTime)}</Text>
           <Text style={styles.masterStatusText}>{isTimerRunning ? "PAUSE" : "START"}</Text>
@@ -310,17 +341,17 @@ export default function App() {
           <View style={styles.subTimerCardThree}>
             <View style={styles.iconBox}><Image source={ASSETS.roshan} style={styles.buttonImage} /></View>
             <Text style={styles.subTimerTitle}>Roshan</Text>
-            <Text style={styles.subTimerValue}>Dead</Text> {/* Roshan */}
+            <Text style={styles.subTimerValue}>Dead</Text>
           </View>
           <View style={styles.subTimerCardThree}>
             <View style={styles.iconBox}><Image source={ASSETS.tormentor} style={styles.buttonImage} /></View>
             <Text style={styles.subTimerTitle}>Tormentor</Text>
-            <Text style={styles.subTimerValue}>20:00</Text> {/* Tormentor */}
+            <Text style={styles.subTimerValue}>20:00</Text>
           </View>
           <View style={styles.subTimerCardThree}>
             <View style={styles.iconBox}><Image source={ASSETS.glyphOfFortification} style={styles.buttonImage} /></View>
             <Text style={styles.subTimerTitle}>Glyph</Text>
-            <Text style={styles.subTimerValue}>Ready</Text> {/* Glyph */}
+            <Text style={styles.subTimerValue}>Ready</Text>
           </View>
         </View>
         <View style={{ height: 40 }} />
@@ -338,28 +369,20 @@ export default function App() {
         <View style={styles.editOverlay}>
           <View style={styles.editCard}>
             <Text style={styles.editTitle}>Change Timer</Text>
-            
+
             <View style={styles.editRow}>
-              <TouchableOpacity 
-                style={styles.editBtn} 
-                onPress={() => {
-                  const newTime = gameTime - 60;
-                  setGameTime(newTime);
-                  baseTimeRef.current = newTime; // Ref'i de güncellemeliyiz!
-                }}
+              <TouchableOpacity
+                style={styles.editBtn}
+                onPress={() => adjustMinutes(-60)} // 1 dk çıkar
               >
-                <Text style={styles.editBtnText}>-1 min</Text>
+                <Text style={styles.editBtnText}>-1 dk</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
-                style={styles.editBtn} 
-                onPress={() => {
-                  const newTime = gameTime + 60;
-                  setGameTime(newTime);
-                  baseTimeRef.current = newTime;
-                }}
+              <TouchableOpacity
+                style={styles.editBtn}
+                onPress={() => adjustMinutes(60)} // 1 dk ekle
               >
-                <Text style={styles.editBtnText}>+1 min</Text>
+                <Text style={styles.editBtnText}>+1 dk</Text>
               </TouchableOpacity>
             </View>
 
