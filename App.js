@@ -1,18 +1,29 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Audio } from 'expo-av';
 import { useEffect, useRef, useState } from 'react';
 import { AppState, Image, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 const ASSETS = {
-  bountyRune: require('./assets/Image/74px-rune_bounty_abilityicon_dota2_wikiasset.png'),
-  waterRune: require('./assets/Image/74px-rune_water_abilityicon_dota2_wikiasset.png'),
-  powerUpRuneHaste: require('./assets/Image/74px-rune_haste_abilityicon_dota2_gameasset.png'),
-  glyphOfFortification: require('./assets/Image/74px-glyph_of_fortification_abilityicon_dota2_gameasset.png'),
-  roshan: require('./assets/Image/150px-roshan_model.png'),
-  tormentor: require('./assets/Image/150px-tormentor_radiant_model.png'),
-  healingLotus: require('./assets/Image/86px-healing_lotus_eat_lotus_abilityicon_dota2_wikiasset.png'),
+
+  /*images*/
+  bountyRune: require('./assets/Images/74px-rune_bounty_abilityicon_dota2_wikiasset.png'),
+  waterRune: require('./assets/Images/74px-rune_water_abilityicon_dota2_wikiasset.png'),
+  powerUpRuneHaste: require('./assets/Images/74px-rune_haste_abilityicon_dota2_gameasset.png'),
+  glyphOfFortification: require('./assets/Images/74px-glyph_of_fortification_abilityicon_dota2_gameasset.png'),
+  roshan: require('./assets/Images/150px-roshan_model.png'),
+  tormentor: require('./assets/Images/150px-tormentor_radiant_model.png'),
+  healingLotus: require('./assets/Images/86px-healing_lotus_eat_lotus_abilityicon_dota2_wikiasset.png'),
+  shrineOfWisdom: require('./assets/Images/86px-shrine_of_wisdom_experience_fountain_abilityicon_dota2_wikiasset.png'),
+  /*GIF*/
   powerUpRunesGif: require('./assets/GIF/dota2PowerUpRuneGif.gif'),
-  shrineOfWisdom: require('./assets/Image/86px-shrine_of_wisdom_experience_fountain_abilityicon_dota2_wikiasset.png'),
+  /*sounds*/
+  bountyRuneTimerExpiredSound: require('./assets/Sounds/Items_rune_bounty.mp3'), // Dosya isimlerin neyse ona göre düzelt
+  waterRuneTimerExpiredSound: require('./assets/Sounds/Items_rune_water.mp3'),
+  powerUpRuneTimerExpiredSound: require('./assets/Sounds/Items_rune_regen.mp3'),
+  shrineOfWisdomTimerExpiredSound: require('./assets/Sounds/Items_shrineOfWisdom_Activate_Sound.mp3'),
+  roshanTimerExpiredSound: require('./assets/Sounds/Misc_rosh_death.mp3'),
+
 };
 
 export default function App() {
@@ -55,8 +66,41 @@ export default function App() {
         }
       } catch (e) { console.error("Load Error", e); }
     };
+
+    
     loadData();
   }, []);
+
+  const lastPlayedSecondRef = useRef(null);
+
+  useEffect(() => {
+    // Saniye değişmediyse veya zamanlayıcı duruyorsa işlem yapma
+    if (!isTimerRunning || lastPlayedSecondRef.current === gameTime) return;
+
+    // --- TAM ZAMANINDA (00:00) ÇALMA KURALLARI ---
+
+    // 1. BOUNTY RÜNÜ (Her 4 dakikada bir: 0, 240, 480...)
+    if (gameTime >= 0 && gameTime % 240 === 0) {
+      playSound(ASSETS.bountyRuneTimerExpiredSound); 
+    }
+
+    // 2. WATER RÜNÜ (Sadece 2. ve 4. dakikada: 120, 240)
+    if (gameTime === 120 || gameTime === 240) {
+      playSound(ASSETS.waterRuneTimerExpiredSound); // Water için özel sesin varsa onu koyabilirsin
+    }
+
+    // 3. POWER UP RÜNÜ (6. dakikadan itibaren her 2 dakikada bir)
+    if (gameTime >= 360 && gameTime % 120 === 0) {
+      playSound(ASSETS.powerUpRuneTimerExpiredSound);
+    }
+
+    // 4. WISDOM RÜNÜ (7. dakikadan itibaren her 7 dakikada bir)
+    if (gameTime > 0 && gameTime % 420 === 0) {
+      playSound(ASSETS.shrineOfWisdomTimerExpiredSound);
+    }
+
+    lastPlayedSecondRef.current = gameTime;
+  }, [gameTime, isTimerRunning]);
 
   // --- 3. TIMER DÖNGÜSÜ ---
   useEffect(() => {
@@ -118,12 +162,24 @@ export default function App() {
     return `${sign}${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
   };
 
+  const playSound = async (soundAsset) => {
+    try {
+      const { sound } = await Audio.Sound.createAsync(soundAsset);
+      await sound.playAsync();
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.didJustFinish) sound.unloadAsync();
+      });
+    } catch (error) {
+      console.log("An error occurred while playing the sound effect", error);
+    }
+  };
+
   // Rün Döngüleri
   // --- DOTA 2 OBJECTIVE LOGIC ---
 
   // Genel hesaplama yardımcı fonksiyonu
   const calculateObjective = (cycle, firstSpawn) => {
-    // 1. Oyun henüz başlamadı (Pre-game)
+    // 1. Oyun henüz başlamadı (Preparation phase)
     if (gameTime < 0) {
       const secondsToHorn = Math.abs(gameTime);
       return formatTime(secondsToHorn + firstSpawn);
