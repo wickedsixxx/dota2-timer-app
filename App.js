@@ -28,26 +28,31 @@ const ASSETS = {
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState('menu');
-  const [gameTime, setGameTime] = useState(-75);
+  const [gameTime, setGameTime] = useState(-90);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
+  const [tormentorLastUsed, setTormentorLastUsed] = useState(null);
 
   const [isEditModalVisible, setEditModalVisible] = useState(false);
 
   const appState = useRef(AppState.currentState);
   const startTimeRef = useRef(null);
-  const baseTimeRef = useRef(-75);
+  const baseTimeRef = useRef(-90);
 
   // --- 1. ZAMAN GÜNCELLEME MANTIĞI ---
-const updateTime = () => {
-  if (startTimeRef.current !== null) {
-    const now = Date.now();
-    // Tam olarak kaç saniye geçtiğini hesapla
-    const elapsedSeconds = Math.floor((now - startTimeRef.current) / 1000);
-    
-    // Ana süreyi güncelle (Taban süre + geçen süre)
-    setGameTime(baseTimeRef.current + elapsedSeconds);
-  }
-};
+  const updateTime = () => {
+    if (startTimeRef.current !== null) {
+      const now = Date.now();
+      // Tam olarak kaç saniye geçtiğini hesapla
+      const elapsedSeconds = Math.floor((now - startTimeRef.current) / 1000);
+
+      // Ana süreyi güncelle (Taban süre + geçen süre)
+      setGameTime(baseTimeRef.current + elapsedSeconds);
+    }
+  };
+
+
+  const [glyphLastUsed, setGlyphLastUsed] = useState(null);
+
 
   // --- 2. VERİ YÜKLEME (STORAGE) ---
   useEffect(() => {
@@ -143,7 +148,7 @@ const updateTime = () => {
   };
   const resetTimer = async () => {
     setIsTimerRunning(false);
-    const initialTime = -75;
+    const initialTime = -90;
     setGameTime(initialTime);
     baseTimeRef.current = initialTime;
     startTimeRef.current = null;
@@ -157,37 +162,102 @@ const updateTime = () => {
   };
 
   const adjustMinutes = (amount) => {
-  if (isTimerRunning) {
-    // --- OYUN AKARKEN (START) ---
-    // Zaman çizgisini (startTimeRef) kaydırıyoruz. 
-    // Bu işlem saniyenin akışını bozmaz, sadece 'başlangıç noktasını' iter.
-    startTimeRef.current -= (amount * 1000);
-    
-    // Ekranda değişikliği anında (milisaniye beklemeden) görmek için
-    updateTime();
-  } else {
-    // --- OYUN DURURKEN (PAUSE) ---
-    // Sadece taban süreyi (baseTime) güncelliyoruz.
-    const newBase = baseTimeRef.current + amount;
-    baseTimeRef.current = newBase;
-    setGameTime(newBase);
-    
-    // Hafızaya kaydet
-    AsyncStorage.setItem('@base_time', newBase.toString());
-  }
-};
+    if (isTimerRunning) {
+      // --- OYUN AKARKEN (START) ---
+      // Zaman çizgisini (startTimeRef) kaydırıyoruz. 
+      // Bu işlem saniyenin akışını bozmaz, sadece 'başlangıç noktasını' iter.
+      startTimeRef.current -= (amount * 1000);
 
- const formatTime = (totalSeconds) => {
-  // Eğer süre -0.9 ile 0 arasındaysa ekranda -0:00 görünmemesi için 
-  // totalSeconds === 0 kontrolü yapabilirsin ama abs yeterli olacaktır.
-  const absoluteSeconds = Math.abs(totalSeconds);
-  const minutes = Math.floor(absoluteSeconds / 60);
-  const seconds = absoluteSeconds % 60;
-  
-  // Sadece süre tam olarak 0'dan küçükse eksi işareti koy
-  const sign = totalSeconds < 0 ? "-" : "";
-  return `${sign}${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
-};
+      // Ekranda değişikliği anında (milisaniye beklemeden) görmek için
+      updateTime();
+    } else {
+      // --- OYUN DURURKEN (PAUSE) ---
+      // Sadece taban süreyi (baseTime) güncelliyoruz.
+      const newBase = baseTimeRef.current + amount;
+      baseTimeRef.current = newBase;
+      setGameTime(newBase);
+
+      // Hafızaya kaydet
+      AsyncStorage.setItem('@base_time', newBase.toString());
+    }
+  };
+
+  const triggerGlyph = () => {
+    // Eğer zaten sayaç dönüyorsa tekrar basılmasını engelleyebilirsin 
+    // ya da her basışta 5 dakikayı sıfırlayabilirsin.
+    setGlyphLastUsed(gameTime);
+
+    // İstersen buraya Glyph basıldığına dair kısa bir ses de ekleyebilirsin:
+    // playSound(ASSETS.glyphSound); 
+  };
+
+  const getGlyphInfo = () => {
+    const cooldown = 300;
+    if (glyphLastUsed === null) return { text: "Ready", color: "#48BB78" };
+
+    const elapsed = gameTime - glyphLastUsed;
+    const remaining = cooldown - elapsed;
+
+    if (remaining <= 0) return { text: "Ready", color: "#48BB78" };
+
+    return {
+      text: formatTime(remaining),
+      color: getDynamicColor(remaining, cooldown)
+    };
+  };
+
+  const triggerTormentor = () => {
+    // Sadece 20. dakikadan (1200 saniye) sonra basılabilir
+    if (gameTime >= 1200) {
+      setTormentorLastUsed(gameTime);
+    }
+  };
+
+  const getTormentorInfo = () => {
+    if (gameTime < 1200) return { text: "20:00", color: "#8A92A6", isLocked: true };
+
+    const cooldown = 600;
+    if (tormentorLastUsed === null) return { text: "Ready", color: "#48BB78", isLocked: false };
+
+    const elapsed = gameTime - tormentorLastUsed;
+    const remaining = cooldown - elapsed;
+
+    if (remaining <= 0) return { text: "Ready", color: "#48BB78", isLocked: false };
+
+    return {
+      text: formatTime(remaining),
+      color: getDynamicColor(remaining, cooldown), // 10 dakikaya göre renk ayarlar
+      isLocked: false
+    };
+  };
+
+  const formatTime = (totalSeconds) => {
+    // Eğer süre -0.9 ile 0 arasındaysa ekranda -0:00 görünmemesi için 
+    // totalSeconds === 0 kontrolü yapabilirsin ama abs yeterli olacaktır.
+    const absoluteSeconds = Math.abs(totalSeconds);
+    const minutes = Math.floor(absoluteSeconds / 60);
+    const seconds = absoluteSeconds % 60;
+
+    // Sadece süre tam olarak 0'dan küçükse eksi işareti koy
+    const sign = totalSeconds < 0 ? "-" : "";
+    return `${sign}${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+  };
+
+  const getDynamicColor = (remaining, total) => {
+    if (remaining <= 0) return "#48BB78"; // Tam bittiğinde saf Yeşil
+
+    // Yüzde kaç tamamlandı? (0 ile 1 arası)
+    // Süre azaldıkça (0'a yaklaştıkça) oran küçülür.
+    const ratio = remaining / total;
+
+    // Kırmızı (229, 62, 62) -> Yeşil (72, 187, 120) arası geçiş
+    const r = Math.floor(72 + (229 - 72) * ratio);
+    const g = Math.floor(187 + (62 - 187) * ratio);
+    const b = Math.floor(120 + (62 - 120) * ratio);
+
+    return `rgb(${r}, ${g}, ${b})`;
+  };
+
 
   const playSound = async (soundAsset) => {
     try {
@@ -202,8 +272,7 @@ const updateTime = () => {
   };
 
   // Rün Döngüleri
-  // Genel hesaplama yardımcı fonksiyonu
-// --- DOTA 2 OBJECTIVE LOGIC ---
+  // --- DOTA 2 OBJECTIVE LOGIC ---
   const calculateObjective = (cycle, firstSpawn, startsInPreGame = false) => {
     // 1. HAZIRLIK EVRESİ (Oyun zamanı negatifken)
     if (gameTime < 0) {
@@ -238,8 +307,7 @@ const updateTime = () => {
   const getPowerUpRuneTime = () => calculateObjective(120, 360, false);
 
   const getRoshanTime = () => {
-    // Roshan ve Tormentor genelde manuel tetiklenir ama 
-    // buraya oyun başından itibaren ne kadar olduğunu yazabiliriz
+
     return "Click"; // İleride buna tıklandığında geri sayım ekleyeceğiz
   };
 
@@ -249,6 +317,7 @@ const updateTime = () => {
         <Text style={styles.mainTitle}>Dota 2 Timer</Text>
         <Text style={styles.subTitle}>Own the objectives. Own the game.</Text>
       </View>
+
       <View style={styles.buttonGrid}>
         <View style={styles.gridRow}>
           <TouchableOpacity style={[styles.menuCard, styles.tealCard]} onPress={() => setCurrentScreen('timers')}>
@@ -260,12 +329,15 @@ const updateTime = () => {
             <Text style={styles.cardLabel}>*default timer*</Text>
           </TouchableOpacity>
         </View>
+
         <View style={styles.gridRow}>
           <TouchableOpacity style={[styles.menuCard, styles.greyCard]}>
             <Ionicons name="settings-outline" size={34} color="white" />
             <Text style={styles.cardLabel}>Settings</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.menuCard, styles.orangeCard]}>
+          <TouchableOpacity style={[styles.menuCard, styles.orangeCard]}
+          onPress={() => setCurrentScreen('about')}
+          >
             <Ionicons name="information-circle-outline" size={38} color="white" />
             <Text style={styles.cardLabel}>About</Text>
           </TouchableOpacity>
@@ -291,7 +363,7 @@ const updateTime = () => {
       <View style={styles.masterTimerWrapper}>
         <TouchableOpacity
           style={[styles.masterButton, isTimerRunning && styles.masterButtonActive]}
-          onPress={toggleTimer} 
+          onPress={toggleTimer}
           onLongPress={() => setEditModalVisible(true)}
           delayLongPress={600} // 0.6 saniye basılı tutunca tetiklenir
         >
@@ -343,26 +415,94 @@ const updateTime = () => {
             <Text style={styles.subTimerTitle}>Roshan</Text>
             <Text style={styles.subTimerValue}>Dead</Text>
           </View>
-          <View style={styles.subTimerCardThree}>
-            <View style={styles.iconBox}><Image source={ASSETS.tormentor} style={styles.buttonImage} /></View>
+          <TouchableOpacity
+            style={[
+              styles.subTimerCardThree,
+              getTormentorInfo().isLocked && { opacity: 0.4 }
+            ]}
+            onPress={triggerTormentor}
+            disabled={getTormentorInfo().isLocked}
+          >
+            <View style={styles.iconBox}>
+              <Image source={ASSETS.tormentor} style={styles.buttonImage} />
+            </View>
             <Text style={styles.subTimerTitle}>Tormentor</Text>
-            <Text style={styles.subTimerValue}>20:00</Text>
-          </View>
-          <View style={styles.subTimerCardThree}>
-            <View style={styles.iconBox}><Image source={ASSETS.glyphOfFortification} style={styles.buttonImage} /></View>
+            <Text style={[styles.subTimerValue, { color: getTormentorInfo().color }]}>
+              {getTormentorInfo().text}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.subTimerCardThree,
+              getGlyphInfo() !== "Ready" && { opacity: 0.6 } // Cooldown varken biraz soluk görünür
+            ]}
+            onPress={triggerGlyph}
+          >
+            <View style={styles.iconBox}>
+              <Image source={ASSETS.glyphOfFortification} style={styles.buttonImage} />
+            </View>
             <Text style={styles.subTimerTitle}>Glyph</Text>
-            <Text style={styles.subTimerValue}>Ready</Text>
-          </View>
+            <Text style={[styles.subTimerValue, { color: getGlyphInfo().color }]}>
+              {getGlyphInfo().text}
+            </Text>
+          </TouchableOpacity>
         </View>
         <View style={{ height: 40 }} />
       </ScrollView>
     </View>
   );
 
+  const aboutContent = (
+    <View style={styles.screenContainer}>
+      <TouchableOpacity onPress={() => setCurrentScreen('menu')} style={styles.navigationButton}>
+        <Ionicons name="arrow-back" size={24} color="white" />
+        <Text style={styles.navigationText}>Menu</Text>
+      </TouchableOpacity>
+
+      <ScrollView showsVerticalScrollIndicator={false} style={{ marginTop: 20 }}>
+        <View style={styles.headerSection}>
+          <MaterialCommunityIcons name="sword-cross" size={60} color="#FFA500" />
+          <Text style={styles.mainTitle}>Dota 2 Timer</Text>
+          <Text style={[styles.subTitle, { color: '#FFA500' }]}>v0.8.4-alpha</Text>
+        </View>
+
+        <View style={styles.aboutCard}>
+          <Text style={styles.aboutText}>
+            Bu uygulama, Dota 2 arenalarında saniyelerin ve objelerin önemini bilen oyuncular için bir *koçluk aracı* olarak tasarlanmıştır.
+          </Text>
+        </View>
+
+        <Text style={styles.sectionTitle}>Özellikler</Text>
+        <View style={styles.featureItem}>
+          <Ionicons name="checkmark-circle" size={20} color="#48BB78" />
+          <Text style={styles.featureText}>özellik3</Text>
+        </View>
+        <View style={styles.featureItem}>
+          <Ionicons name="checkmark-circle" size={20} color="#48BB78" />
+          <Text style={styles.featureText}>özellik2</Text>
+        </View>
+        <View style={styles.featureItem}>
+          <Ionicons name="checkmark-circle" size={20} color="#48BB78" />
+          <Text style={styles.featureText}>özelllik1</Text>
+        </View>
+
+        <Text style={styles.sectionTitle}>Legal Notice</Text>
+        <Text style={styles.legalText}>
+          Dota 2 is a registered trademark of Valve Corporation. This application is a fan-made project with no official affiliation with Valve. All in-game assets are property of Valve Corporation.
+        </Text>
+
+        <View style={{ height: 60 }} />
+      </ScrollView>
+    </View>
+  );
+
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" />
-      {currentScreen === 'menu' ? menuContent : timerContent}
+      {currentScreen === 'menu' && menuContent}
+      {currentScreen === 'timers' && timerContent}
+      {currentScreen === 'about' && aboutContent}
 
       {/* DÜZENLEME MODAL (PENCERESİ) */}
       {isEditModalVisible && (
@@ -373,16 +513,16 @@ const updateTime = () => {
             <View style={styles.editRow}>
               <TouchableOpacity
                 style={styles.editBtn}
-                onPress={() => adjustMinutes(-60)} // 1 dk çıkar
+                onPress={() => adjustMinutes(-60)}
               >
-                <Text style={styles.editBtnText}>-1 dk</Text>
+                <Text style={styles.editBtnText}>-1 min</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={styles.editBtn}
-                onPress={() => adjustMinutes(60)} // 1 dk ekle
+                onPress={() => adjustMinutes(60)}
               >
-                <Text style={styles.editBtnText}>+1 dk</Text>
+                <Text style={styles.editBtnText}>+1 min</Text>
               </TouchableOpacity>
             </View>
 
@@ -445,6 +585,44 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#2A3142',
   },
+
+  aboutCard: {
+    backgroundColor: '#1A1F2B',
+    padding: 20,
+    borderRadius: 15,
+    marginBottom: 20,
+  },
+  aboutText: {
+    color: '#8A92A6',
+    fontSize: 16,
+    lineHeight: 24,
+    textAlign: 'center',
+  },
+  sectionTitle: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 15,
+    marginTop: 10,
+  },
+  featureItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    gap: 10,
+  },
+  featureText: {
+    color: '#D1D5DB',
+    fontSize: 14,
+  },
+  legalText: {
+    color: '#4B5563',
+    fontSize: 12,
+    fontStyle: 'italic',
+    lineHeight: 18,
+    marginTop: 10,
+  },
+
   editTitle: { color: 'white', fontSize: 18, fontWeight: 'bold', marginBottom: 20 },
   editRow: { flexDirection: 'row', gap: 15 },
   editBtn: { backgroundColor: '#2A3142', padding: 15, borderRadius: 12, minWidth: 80, alignItems: 'center' },
